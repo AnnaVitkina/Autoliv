@@ -126,5 +126,19 @@ def main(data_dir: str | Path | None = None) -> int:
         return 1
 
 
+def _in_notebook_or_exec() -> bool:
+    """True in Colab / IPython / exec(open(...).read()) — avoid SystemExit there."""
+    if "__file__" not in globals():
+        return True
+    try:
+        get_ipython()  # type: ignore[name-defined]
+        return True
+    except NameError:
+        return False
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    _rc = main()
+    # SystemExit in Colab/IPython triggers: "To exit: use 'exit', 'quit', or Ctrl-D."
+    if not _in_notebook_or_exec():
+        raise SystemExit(_rc)
