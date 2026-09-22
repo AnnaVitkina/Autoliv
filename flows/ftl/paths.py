@@ -38,8 +38,6 @@ CODE_DIR: Path
 INPUT_DIR: Path
 OUTPUT_DIR: Path
 FUEL_DIR: Path
-PREVIOUS_RA_DIR: Path
-PREVIOUS_RA_HERO_DIR: Path
 PREVIOUS_RATE_CARD_DIR: Path
 
 
@@ -90,15 +88,13 @@ def configure_paths(
     Call before running a flow when overriding the default location.
     """
     global BASE_DIR, CODE_DIR, INPUT_DIR, OUTPUT_DIR, FUEL_DIR
-    global PREVIOUS_RA_DIR, PREVIOUS_RA_HERO_DIR, PREVIOUS_RATE_CARD_DIR
+    global PREVIOUS_RATE_CARD_DIR
 
     CODE_DIR = resolve_code_dir(code_dir)
     BASE_DIR = resolve_base_dir(data_dir)
     INPUT_DIR = BASE_DIR / "input"
     OUTPUT_DIR = BASE_DIR / "output"
     FUEL_DIR = INPUT_DIR / "Fuel"
-    PREVIOUS_RA_DIR = INPUT_DIR / "previous RA"
-    PREVIOUS_RA_HERO_DIR = INPUT_DIR / "previous RA HERO"
     PREVIOUS_RATE_CARD_DIR = INPUT_DIR / "previous rate card"
     return BASE_DIR
 
@@ -118,8 +114,6 @@ def ensure_data_dirs() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     for folder in (
         FUEL_DIR,
-        PREVIOUS_RA_DIR,
-        PREVIOUS_RA_HERO_DIR,
         PREVIOUS_RATE_CARD_DIR,
         *(INPUT_DIR / name for name in FLOW_INPUT_DIRS.values()),
     ):
