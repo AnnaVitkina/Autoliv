@@ -48,14 +48,15 @@ DETAIL_COLUMNS = [
     "Paying_Plant",
     "CustomerNo",
     "OriginalSender",
+    "Loading_Country",
     "Shippers_Loading",
     "Loading_Zip",
     "Origin Postal Code",  # filled later from Loading_Zip for dedup
     "Loading_City",
     "OriginNo",
     "DestinationNo",
-    "Unloading_Country",
     "Unloading_Zip",
+    "Unloading_Country",
     "Destination Postal Code",  # filled later from Unloading_Zip for dedup
     "Unloading_Place",
     "Unloading_City",
