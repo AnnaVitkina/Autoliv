@@ -32,7 +32,8 @@ FLAT_COL = "Flat"
 SHEET_MATRIX = "Matrix"
 
 ATTR_DUPLICATE_LANE = "duplicate_lane"
-ATTR_DEST_COMBINED = "dest_combined"  # DestinationNo gathered from _00/_01/... variants (blue)
+# DestinationNo gathered from _00/_01/... when prices match or do not overlap (blue)
+ATTR_DEST_COMBINED = "dest_combined"
 
 # Shipment identity used when collapsing quantity/price rows into one lane
 LANE_GROUP_COLS = [
