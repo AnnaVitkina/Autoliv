@@ -88,6 +88,107 @@ def gather_destination_nos(values) -> tuple[str, bool]:
     return ", ".join(seen), True
 
 
+def _is_empty_price(price) -> bool:
+    """Missing or 0 = no real cost for that bracket (may be filled by another variant)."""
+    if price is None or price == "":
+        return True
+    try:
+        return float(price) == 0.0
+    except (TypeError, ValueError):
+        return False
+
+
+def _dest_price_map(rows: pd.DataFrame) -> dict[tuple, tuple[str, float]]:
+    """
+    Map (unit, from, to) -> (currency, price) for one DestinationNo variant.
+    First non-empty price wins when the same range appears twice.
+    """
+    prices: dict[tuple, tuple[str, float]] = {}
+    for _, row in rows.iterrows():
+        unit = normalize_unit(row.get("QuantityUnit"))
+        fr = row.get("QuantityRangeFrom")
+        to = row.get("QuantityRangeTo")
+        amount = safe_amount(row.get("Price"))
+        if amount is None or _is_empty_price(amount):
+            continue
+        fr_n = round(float(fr), 6) if pd.notna(fr) else None
+        to_n = round(float(to), 6) if pd.notna(to) else None
+        key = (unit, fr_n, to_n)
+        if key in prices:
+            continue
+        prices[key] = (normalize_currency(row.get("Currency")), float(amount))
+    return prices
+
+
+def _prices_compatible(
+    a: dict[tuple, tuple[str, float]],
+    b: dict[tuple, tuple[str, float]],
+) -> bool:
+    """
+    Compatible when there is no overlapping conflict:
+      - same range empty/0 on one side → ok (complementary)
+      - same range same currency+price → ok
+      - same range both non-zero and different → not ok
+    """
+    for key in set(a) | set(b):
+        if key not in a or key not in b:
+            continue
+        if a[key] != b[key]:
+            return False
+    return True
+
+
+def _merge_price_maps(
+    a: dict[tuple, tuple[str, float]],
+    b: dict[tuple, tuple[str, float]],
+) -> dict[tuple, tuple[str, float]]:
+    out = dict(a)
+    for key, val in b.items():
+        if key not in out:
+            out[key] = val
+    return out
+
+
+def _lane_subgroups_compatible_prices(group: pd.DataFrame) -> list[pd.DataFrame]:
+    """
+    Within Paying_Plant + OriginNo + destination-base, gather DestinationNo
+    variants when prices match or do not overlap (zeros/gaps allowed).
+    Conflicting non-zero prices on the same range → separate lanes.
+    """
+    dest_order: list[str] = []
+    by_dest: dict[str, list] = defaultdict(list)
+    for idx, row in group.iterrows():
+        raw = row.get("DestinationNo")
+        dest = "" if pd.isna(raw) else str(raw).strip()
+        if dest not in by_dest:
+            dest_order.append(dest)
+        by_dest[dest].append(idx)
+
+    dest_maps = {
+        dest: _dest_price_map(group.loc[by_dest[dest]]) for dest in dest_order
+    }
+
+    clusters: list[dict] = []
+    for dest in dest_order:
+        placed = False
+        for cluster in clusters:
+            if _prices_compatible(cluster["map"], dest_maps[dest]):
+                cluster["dests"].append(dest)
+                cluster["map"] = _merge_price_maps(cluster["map"], dest_maps[dest])
+                placed = True
+                break
+        if not placed:
+            clusters.append({"dests": [dest], "map": dict(dest_maps[dest])})
+
+    subgroups: list[pd.DataFrame] = []
+    for cluster in clusters:
+        idxs: list = []
+        for dest in cluster["dests"]:
+            idxs.extend(by_dest[dest])
+        subgroups.append(group.loc[idxs])
+    return subgroups
+
+
 def format_range_number(value) -> str:
     """1.0 -> 1, 2.5 -> 2.5, 2500.0 -> 2500."""
     num = float(value)
@@ -752,7 +853,7 @@ def build_matrix(df: pd.DataFrame) -> pd.DataFrame:
     cost_blocks.extend(trp_dedicated)
     cost_blocks.extend(place_span)
 
-    # Preserve input order of first occurrence per lane
+    # Preserve input order; split dest-base groups when prices differ
     order_keys: list[tuple] = []
     groups: dict[tuple, list[int]] = defaultdict(list)
     for idx, row in df.iterrows():
@@ -761,13 +862,16 @@ def build_matrix(df: pd.DataFrame) -> pd.DataFrame:
             order_keys.append(key)
         groups[key].append(idx)
 
+    lane_groups: list[pd.DataFrame] = []
+    for key in order_keys:
+        lane_groups.extend(_lane_subgroups_compatible_prices(df.loc[groups[key]]))
+
     detail_rows: list[dict] = []
     dest_combined_flags: list[bool] = []
     valid_from_rates_flags: list[bool] = []
     cost_value_rows: list[dict] = []
 
-    for lane_no, key in enumerate(order_keys, start=1):
-        group = df.loc[groups[key]]
+    for lane_no, group in enumerate(lane_groups, start=1):
         detail, dest_combined, rates_later = _detail_from_group(group, lane_no)
         detail_rows.append(detail)
         dest_combined_flags.append(dest_combined)
